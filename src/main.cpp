@@ -2,12 +2,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <fstream>
-#include <iostream>
-#include <ESP32_FTPClient.h>
+#include <ESPUI.h>
 #include "esp32_ap.h"
-#include "pc_static_ip.h"
-#include "ftp_client.h"
 
 // Define the GPIO pins for SPI communication on ESP32
 #define SS_PIN 21
@@ -15,6 +11,15 @@
 #define SCK_PIN 18
 #define MOSI_PIN 23
 #define MISO_PIN 19
+
+String state = "Unknown";
+
+// Current time
+unsigned long currentTime = millis();
+// Previous time
+unsigned long previousTime = 0; 
+// Define timeout time in milliseconds (example: 2000ms = 2s)
+const long timeoutTime = 2000;
 
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance
@@ -25,13 +30,13 @@ byte safeCardUID[4] = {0x62, 0x15, 0x48, 0x55};
 void setup() {
   Serial.begin(115200);                                     // Initialize serial communications with the PC
   createESP32AccessPoint();
-  configureStaticIPForPC();
   Serial.println("ESP32 is ready. Connect to the Access Point.");
   Serial.println("ESP32 IP: ");
   Serial.println(WiFi.softAPIP());
-  initFTPConnection();
   SPI.begin();                                                    // Init SPI bus
   mfrc522.PCD_Init();                                              // Init MFRC522 card
+  ESPUI.label("Card Status: ", ControlColor::Turquoise, state); // Start the ESPUI framework
+  ESPUI.begin("Sistem Antifurt");
 }
 
 void PrintHex(uint8_t *data, uint8_t length) // prints 8-bit data in hex with leading zeroes
@@ -64,8 +69,10 @@ void deregister_card(){
   memset(&id,0, sizeof(id));
 }
 uint8_t control = 0x00;
-void loop() {
 
+//loop
+void loop() {
+  
   MFRC522::MIFARE_Key key;
   for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF;
   MFRC522::StatusCode status;
@@ -90,10 +97,12 @@ void loop() {
   // Check if the card is the safe card
   if (memcmp(id.uidByte, safeCardUID, 4) == 0) {
     Serial.println("Safe card");
-    writeToFile("log.txt", "Safe");
+    state = "Safe";
+    ESPUI.updateLabel(1, state);
   } else {
     Serial.println("Not Safe card");
-    writeToFile("log.txt", "Unsafe");
+    state = "Unsafe";
+    ESPUI.updateLabel(1, state);
   }
 
   while(true){
@@ -119,8 +128,9 @@ void loop() {
   }
   
   Serial.println("CardRemoved");
-  writeToFile("log.txt", "Removed");
-  delay(500); 
+  state = "Removed";
+  ESPUI.updateLabel(1, state);
+  delay(2000); 
 
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
